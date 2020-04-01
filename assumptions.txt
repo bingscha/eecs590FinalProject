@@ -1,0 +1,2 @@
+Assume only working with integeres
+Assume no integer overflows/underflow in code
