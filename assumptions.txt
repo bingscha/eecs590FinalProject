@@ -1,2 +1,4 @@
-Assume only working with integeres
+Assume only working with integers
+No pointers aside from arrays
 Assume no integer overflows/underflow in code
+Assume everything is in main, no function calls. May add later
