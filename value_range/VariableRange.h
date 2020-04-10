@@ -14,17 +14,24 @@
 
 // STL Includes
 #include <algorithm>
+#include <iostream>
 #include <limits.h>
 
 using namespace llvm;
 
+using std::ostream;
 using std::max;
 using std::min;
 
 struct VariableRange {
     int min_value = INT_MIN;
-    int max_value = INT_MAX;
+    int max_value = INT_MAX;  
 };
+
+ostream& operator<<(ostream& os, const VariableRange& range) {
+    os << range.min_value << "\t" << range.max_value << "\n";
+    return os;
+}
 
 // Check if specific operation will cause overflow or underflow.
 // If it does, return the corresponding value.
@@ -134,6 +141,79 @@ VariableRange divRanges(const VariableRange& lhs, const VariableRange& rhs) {
     }
 
     return checkAllCombinations(lhs, rhs, '/');
+}
+
+bool validate(const VariableRange& range) {
+    return range.max_value >= range.min_value;
+}
+
+// Returns the range if lhs < rhs for lhs
+// If this range is not possible, for example [3, 4] < [1, 3], the successful is false
+VariableRange lessRange(const VariableRange& lhs, const VariableRange& rhs, bool& successful) {
+    VariableRange output = lhs;
+    output.max_value = min(rhs.max_value - 1, lhs.max_value);
+
+    if (validate(output)) {
+        successful = true;
+        return output;
+    }
+    else {
+        successful = false;
+        return {INT_MAX, INT_MAX};
+    }
+}
+
+VariableRange lessEqualRange(const VariableRange& lhs, const VariableRange& rhs, bool& successful) {
+    VariableRange output = lhs;
+    output.max_value = min(rhs.max_value, lhs.max_value);
+
+    if (validate(output)) {
+        successful = true;
+        return output;
+    }
+    else {
+        successful = false;
+        return {INT_MAX, INT_MAX};
+    }
+}
+
+// Returns the range if lhs < rhs for lhs
+// If this range is not possible, for example [3, 4] < [1, 3], the successful is false
+VariableRange greaterRange(const VariableRange& lhs, const VariableRange& rhs, bool& successful) {
+    VariableRange output = lhs;
+    output.min_value = min(rhs.min_value + 1, lhs.max_value);
+
+    if (validate(output)) {
+        successful = true;
+        return output;
+    }
+    else {
+        successful = false;
+        return {INT_MAX, INT_MAX};
+    }
+}
+
+VariableRange greaterEqualRange(const VariableRange& lhs, const VariableRange& rhs, bool& successful) {
+    VariableRange output = lhs;
+    output.min_value = min(rhs.min_value, lhs.max_value);
+
+    if (validate(output)) {
+        successful = true;
+        return output;
+    }
+    else {
+        successful = false;
+        return {INT_MAX, INT_MAX};
+    }
+}
+
+VariableRange equalRange(const VariableRange& lhs, const VariableRange& rhs, bool& successful) {
+    VariableRange output = lessEqualRange(lhs, rhs, successful);
+    if (successful) {
+        output = greaterEqualRange(output, rhs, successful);
+    }
+
+    return output;
 }
 
 #endif
