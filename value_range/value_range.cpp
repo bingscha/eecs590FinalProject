@@ -10,6 +10,8 @@
 #include "llvm/Analysis/BlockFrequencyInfo.h"
 #include "llvm/Analysis/BranchProbabilityInfo.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/IR/DebugLoc.h"
+#include "llvm/IR/DebugInfoMetadata.h"
 
 // Personal Includes
 #include "VariableRange.h"
@@ -36,6 +38,8 @@ using std::unordered_set;
 using std::vector;
 
 typedef unordered_map<Value*, VariableRange> Ranges;
+
+#define INT_SIZE 32
 
 namespace {
 
@@ -172,6 +176,15 @@ namespace {
             switch(op) {
                 case '+' :
                     ranges[inst] = addRanges(firstRange, secondRange);
+                    break;
+                case '-':
+                    ranges[inst] = subRanges(firstRange, secondRange);
+                    break;
+                case '/':
+                    ranges[inst] = divRanges(firstRange, secondRange);
+                    break;
+                case '*':
+                    ranges[inst] = multRanges(firstRange, secondRange);
                     break;
                 default :
                     // errs() << "Unexpected op\nExitting\n";
@@ -311,15 +324,7 @@ namespace {
                 bool if_reachable = false;
                 bool else_reachable = false;
 
-                // TODO Do something with icmp to update ranges
                 handleICMP(icmp, if_ranges, else_ranges, if_reachable, else_reachable);
-                
-                // errs() << *branch << "\n";
-                // errs() << *icmp << "\n";
-                // errs() << if_reachable << "\n";
-                // errs() << else_reachable << "\n";
-                // errs() << *if_succ << "\n";
-                // errs() << *else_succ << "\n";
 
                 bool changed = false;
                 bool initialized = false;
@@ -392,6 +397,21 @@ namespace {
             }
         }
 
+        void handleGEPOperations(Instruction* inst, Ranges& ranges) {
+            // Nothing is assumed about values in arrays
+            ranges[inst] = VariableRange();
+        }
+
+        void handleCallOperations(Instruction* inst, Ranges& ranges) {
+            // Nothing is assumed about calls
+            ranges[inst] = VariableRange();
+        }
+
+        void handleCastOperations(Instruction* inst, Ranges& ranges) {
+            assert(ranges.count(inst->getOperand(0)));
+            ranges[inst] = ranges[inst->getOperand(0)];
+        }
+
         bool handleInst(Instruction* inst, Ranges& ranges) {
             switch (inst->getOpcode()) {
                 case Instruction::Alloca :
@@ -406,10 +426,45 @@ namespace {
                 case Instruction::Add :
                     handleBinaryOperations(inst, ranges, '+');
                     break;
+                case Instruction::Sub :
+                    handleBinaryOperations(inst, ranges, '-');
+                    break;
+                case Instruction::SDiv :
+                    handleBinaryOperations(inst, ranges, '/');
+                    break;
+                case Instruction::Mul :
+                    handleBinaryOperations(inst, ranges, '*');
+                    break;
                 case Instruction::Br :
                     // Handles branches differently, should just return as it updates
                     return handleBranchInstruction(inst, ranges);
+                case Instruction::GetElementPtr :
+                    handleGEPOperations(inst, ranges);
+                    break;
+                case Instruction::Call :
+                    handleCallOperations(inst, ranges);
+                    break;
+                case Instruction::Trunc :
+                case Instruction::ZExt :
+                case Instruction::SExt :
+                case Instruction::FPTrunc:
+                case Instruction::FPExt:
+                case Instruction::FPToUI:
+                case Instruction::FPToSI:
+                case Instruction::UIToFP:
+                case Instruction::SIToFP:
+                case Instruction::IntToPtr:
+                case Instruction::PtrToInt:
+                case Instruction::BitCast:
+                case Instruction::AddrSpaceCast:
+                    // Casting instructions, results should be same as input
+                    handleCastOperations(inst, ranges);
+                    break;
+                case Instruction::ICmp : // Ignore this instr, will be handled in branch
+                case Instruction::Ret : // Ignore this instruction, nothing is assumed about post-condition
+                    break;
                 default:
+                    errs() << *inst << "\n";
                     break;
             }
 
@@ -418,15 +473,117 @@ namespace {
                     return false;
                 }
                 else {
-                    // errs() << "UPDATED RANGE FOR INST: " << *inst << "\n";
+                    widen(ranges, inst_to_ranges[inst]);
                     inst_to_ranges[inst] = ranges;
                     return true;
                 }
             }
             else {
-                // errs() << "NEW RANGE FOR INST: " << *inst << "\n";
                 inst_to_ranges[inst] = ranges;
                 return true;
+            }
+        }
+
+        bool widen(Ranges& current, Ranges& original) {
+            bool widened = false;
+
+            for (auto& val_to_var_range : current) {
+                Value* val = val_to_var_range.first;
+                VariableRange& range = val_to_var_range.second;
+
+                if (original.count(val)) {
+                    VariableRange& otherRange = original[val];
+
+                    if (range.max_value > otherRange.max_value) {
+                        range.max_value = INT_MAX;
+                        widened = true;
+                    }
+
+                    if (range.min_value < otherRange.min_value) {
+                        range.min_value = INT_MIN;
+                        widened = true;
+                    }
+                }
+            }
+
+            return widened;
+        }
+
+        void getArrayInformation(Function& F) {
+            auto DL = F.getParent()->getDataLayout();
+            for (BasicBlock& BB : F) {
+                for (Instruction& I : BB) {
+                    if (isa<AllocaInst>(&I)) {
+                        AllocaInst* alloca = dyn_cast<AllocaInst>(&I);
+                        if (alloca->getAllocatedType()->isArrayTy()) {
+                            array_sizes[alloca] = alloca->getAllocationSizeInBits(DL).getValue() / INT_SIZE;
+                        }
+                    }
+                }
+            }
+        }
+
+        Ranges& getBeforeRanges(Instruction* inst) {
+            if (&(*(inst->getParent()->begin())) == inst) {
+                return basic_block_before_ranges[inst->getParent()];
+            }
+            else {
+                Instruction* prev = nullptr;
+                for (Instruction& I : *(inst->getParent())) {
+                    if (inst == &I) {
+                        break;
+                    }
+                    prev = &I;
+                }
+
+                return inst_to_ranges[prev];
+            }
+        }
+
+        void printDebugInformation(Instruction* inst) {
+            DILocation* loc = inst->getDebugLoc();
+            if (!loc) {
+                errs() << "WARNING: Possible array out of bounds access at ";
+                errs() << *inst << "\n";
+                errs() << "Please compile with -g to see line numbers.\n";
+            }
+            else {
+                loc->getDirectory();
+                errs() << loc->getFilename() << ":" << loc->getLine() << ":"; 
+                errs() << loc->getColumn() << ": warning: possible array out of bounds access.\n";
+            }   
+        }
+
+        void checkArrayBounds(Function& F) {
+            for (BasicBlock& BB : F) {
+                for (Instruction& I : BB) {
+                    if (isa<GetElementPtrInst>(&I)) {
+                        if (!inst_to_ranges.count(&I)) {
+                            // We determined this block was not reachable
+                            continue;
+                        }
+                        Ranges& ranges = getBeforeRanges(&I);
+                        AllocaInst* array = dyn_cast<AllocaInst>(I.getOperand(0));
+                        assert(array_sizes.count(array));
+                        int array_size = array_sizes[array];
+
+                        Value* index = I.getOperand(2);
+                        VariableRange range;
+                        if (isa<ConstantInt>(index)) {
+                            ConstantInt* constant = dyn_cast<ConstantInt>(index);
+                            range.min_value = static_cast<int>(constant->getSExtValue());
+                            range.max_value = range.min_value;
+                        }
+                        else {
+                            range = ranges[index];
+                        }
+
+                        if (outOfRange(range, array_size)) {
+                            printDebugInformation(&I);
+                            // errs() << "WARNING: OUT OF RANGE ARRAY\n" << I << "\n";
+                        }
+                    }
+                }
             }
         }
 
@@ -491,13 +648,11 @@ namespace {
                     // Update the before range appropriately, mark if there is any change.
                     if (basic_block_before_ranges.count(current)) {
                         if (!equal_ranges(basic_block_before_ranges[current], unioned)) {
-                            // errs() << "BEFORE BLOCK IS DIFFERENT FOR : \n" << *current;
                             changed = true;
                             basic_block_before_ranges[current] = unioned;
                         }
                     }
                     else {
-                        // errs() << "BEFORE BLOCK IS NEW FOR : \n" << *current;
                         changed = true;
                         basic_block_before_ranges[current] = unioned;
                     }
@@ -509,22 +664,30 @@ namespace {
                 }
 
             }
-            
-            errs() << F << "\n";
-            for (BasicBlock& bb : F) {
-                errs() << "++++++++++++++++++++++++++++++++ NEW BB ++++++++++++++++++++++++++++++++\n";
-                for (Instruction& I : bb) {
-                    if (inst_to_ranges.count(&I)) {
-                        errs() << I << "\n";
-                        for (auto& range : inst_to_ranges[&I]) {
-                            errs() << "\t" << *(range.first) << " " << range.second.min_value << " " << range.second.max_value << "\n";
-                        }
-                    }
-                    else {
-                        errs() << "NOT INCLUDED: " << I << "\n";
-                    }
-                }
-            }
+
+            // errs() << F << "\n";
+            // for (BasicBlock& bb : F) {
+            //     errs() << "++++++++++++++++++++++++++++++++ NEW BB ++++++++++++++++++++++++++++++++\n";
+            //     for (Instruction& I : bb) {
+            //         if (inst_to_ranges.count(&I)) {
+            //             errs() << I << "\n";
+            //             for (auto& range : inst_to_ranges[&I]) {
+            //                 errs() << "\t" << *(range.first) << " " << range.second.min_value << " " << range.second.max_value << "\n";
+            //             }
+            //         }
+            //         else {
+            //             errs() << "NOT INCLUDED: " << I << "\n";
+            //         }
+            //     }
+            // }
+
+            /**************************** BEGIN STATIC ARRAY RANGE ANALYSIS ****************************/
+
+            // Get all of the arrays
+            getArrayInformation(F);
+
+            // Check to see if range is out of bounds
+            checkArrayBounds(F);
             return false;
         }
     private:
@@ -533,6 +696,7 @@ namespace {
         unordered_map<BasicBlock*, Ranges> basic_block_before_ranges;
         unordered_map<BasicBlock*, unordered_map<BasicBlock*, Ranges> > bb_to_succ_ranges;
         unordered_set<BasicBlock*> unreachable;
+        unordered_map<AllocaInst*, int> array_sizes;
     };
 }
 

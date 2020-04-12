@@ -25,12 +25,28 @@ using std::min;
 
 struct VariableRange {
     int min_value = INT_MIN;
-    int max_value = INT_MAX;  
-};
+    int max_value = INT_MAX;
+
+    bool operator==(VariableRange& other) {
+        return min_value == other.min_value && max_value == other.max_value;
+    }
+ };
 
 ostream& operator<<(ostream& os, const VariableRange& range) {
     os << range.min_value << "\t" << range.max_value << "\n";
     return os;
+}
+
+bool outOfRange(const VariableRange& range, int array_size) {
+    if (range.max_value < 0) {
+        return true;
+    }
+
+    if (range.min_value > array_size) {
+        return true;
+    }
+
+    return false;
 }
 
 // Check if specific operation will cause overflow or underflow.
