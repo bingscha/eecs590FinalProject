@@ -42,7 +42,7 @@ bool outOfRange(const VariableRange& range, int array_size) {
         return true;
     }
 
-    if (range.min_value > array_size) {
+    if (range.min_value >= array_size) {
         return true;
     }
 

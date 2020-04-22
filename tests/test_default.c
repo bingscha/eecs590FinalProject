@@ -8,33 +8,14 @@ int main() {
     int k = 10;
     int interestingName[1000];
 
-    // while (i < 1000000) {
-    //     ++i;
-    // }
-
-    if (i < 10) {
-        ++i;
-    }
-    else if (i > 10) {
-        ++i;
-    }
-    else if (i <= 10) {
-        ++i;
-    }
-    else if (i >= 10) {
-        ++i;
-    }
-    else if (i == 10) {
-        ++i;
-    }
-    else if (i != 10) {
-        ++i;
-    }
-    else if (!(i < 10) && i < j) {
+    while (i < 10000) {
+        if (i > 989) {
+            interestingName[i + k] = j;
+        }
         ++i;
     }
 
-    interestingName[10] = temp();
+    interestingName[temp()] = temp();
     int d = interestingName[10];
     i = j;
 
