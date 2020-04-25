@@ -1,33 +1,23 @@
-#include <stdio.h> 
-#include <stdlib.h> 
+#include <stdlib.h>
+#include <vector>
+
+using namespace std;
 
 #define ITERATIONS 100000000
 
 int main() {
-    int* to_access = (int *)malloc(sizeof(int)*ITERATIONS);
+    vector<int> to_access(ITERATIONS);
 
-    for (int i = 0; i < ITERATIONS * 10; ++i) {
+    for (int i = 0; i < ITERATIONS; ++i) {
         int idx = rand() % ITERATIONS;
-        if (idx >= 0 && idx < ITERATIONS) {
-            to_access[idx] = rand();
-        }
-        else {
-            exit(1);   
-        }
+        to_access.at(idx) = rand();
     }
 
     long long sum = 0;
-    for (int i = 0; i < ITERATIONS * 10; ++i) {
+    for (int i = 0; i < ITERATIONS; ++i) {
         int idx = rand() % ITERATIONS;
-        if (idx >= 0 && idx < ITERATIONS) {
-            sum += to_access[idx];
-        }
-        else {
-            exit(1);   
-        }
+        sum += to_access.at(idx);
     }
-
-    free(to_access);
 
     return sum;
 }
