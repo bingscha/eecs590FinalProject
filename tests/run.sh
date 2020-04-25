@@ -2,7 +2,7 @@
 rm -f *.bc
 
 PATH_MYPASS=/home/bingscha/eecs590Project/build/value_range/LLVMJPT.so            ### Action Required: Specify the path to your pass ###
-NAME_MYPASS=-ValueRange                                                           ### Action Required: Specify the name for your pass ###
+NAME_MYPASS=-BoundsCheck                                                           ### Action Required: Specify the name for your pass ###
 
 for filename in test*.c; do
     /home/bingscha/bin/bin/clang -emit-llvm -c -g ${filename} -o test.bc
