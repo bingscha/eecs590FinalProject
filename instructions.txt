@@ -1,0 +1,22 @@
+Detailed instructions on how to build/execute the code are specified in the paper pdf.
+
+Required
+LLVM 8.0.1
+GCC min version 7.2.0
+CMake min version 3.4
+
+To build:
+
+cd $BOUNDS_CHECK_ROOT
+mkdir build;cd build
+cmake ..
+make
+
+This will generate a file $BOUNDS_CHECK_ROOT/build/value_range/LLVMJPT.so
+
+To run:
+
+clang -emit-llvm -c -g $FILE -o test.bc
+opt -load $BOUNDS_CHECK_ROOT/build/value_range/LLVMJPT.so -BoundsCheck -disable-output < test.bc
+
+where $FILE is the file you want to test.
