@@ -1,6 +1,7 @@
 Detailed instructions on how to build/execute the code are specified in the paper pdf.
 
-Required
+Required:
+Clang 8.0.1
 LLVM 8.0.1
 GCC min version 7.2.0
 CMake min version 3.4
