@@ -6,6 +6,8 @@ LLVM 8.0.1
 GCC min version 7.2.0
 CMake min version 3.4
 
+This was only tested on Ubuntu 18.04, other OS's may yield different results.
+
 To build:
 
 cd $BOUNDS_CHECK_ROOT
